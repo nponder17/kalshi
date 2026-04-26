@@ -66,12 +66,22 @@ def _load_key():
     # Railway: key content stored in env var KALSHI_PRIVATE_KEY
     pem_content = os.getenv("KALSHI_PRIVATE_KEY", "")
     if pem_content:
-        # Env vars can't have real newlines easily; allow \n as literal escape
-        pem_content = pem_content.replace("\\n", "\n")
-        _PRIVATE_KEY = serialization.load_pem_private_key(
-            pem_content.encode(), password=None, backend=default_backend()
-        )
-        return _PRIVATE_KEY
+        # Handle both escaped \n (from awk one-liner) and real newlines
+        if "\\n" in pem_content:
+            pem_content = pem_content.replace("\\n", "\n")
+        # Strip any surrounding quotes Railway might add
+        pem_content = pem_content.strip().strip('"').strip("'")
+        # Ensure it ends with a newline
+        if not pem_content.endswith("\n"):
+            pem_content += "\n"
+        try:
+            _PRIVATE_KEY = serialization.load_pem_private_key(
+                pem_content.encode(), password=None, backend=default_backend()
+            )
+            return _PRIVATE_KEY
+        except Exception as e:
+            print(f"  [key] KALSHI_PRIVATE_KEY parse failed: {e}")
+            print(f"  [key] First 60 chars: {repr(pem_content[:60])}")
 
     # Local: path from .env
     path = os.getenv("KALSHI_PRIVATE_KEY_PATH", "")
@@ -82,6 +92,10 @@ def _load_key():
             )
         return _PRIVATE_KEY
 
+    # Diagnostics to help debug
+    print(f"  [key] KALSHI_PRIVATE_KEY set: {bool(os.getenv('KALSHI_PRIVATE_KEY'))}")
+    print(f"  [key] KALSHI_PRIVATE_KEY len: {len(os.getenv('KALSHI_PRIVATE_KEY',''))}")
+    print(f"  [key] KALSHI_PRIVATE_KEY_PATH: {os.getenv('KALSHI_PRIVATE_KEY_PATH','(not set)')}")
     raise RuntimeError(
         "No private key found.\n"
         "  Railway: set KALSHI_PRIVATE_KEY env var (PEM content)\n"
